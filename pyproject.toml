@@ -2,7 +2,7 @@
 name = "practice1"
 description = "A cool introductory practice to learn the basics for deep learning"
 readme = "README.md"
-requires-python = "==3.11.*"
+requires-python = "==3.11.14"
 version = "0.0.1"
 
 dependencies = [
