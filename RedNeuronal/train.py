@@ -1,6 +1,9 @@
+import json
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import timm
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -9,7 +12,6 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from .dataset import SignDataset
-from .model import CnnJulen, ConvolutionalNeuralNetwork
 
 
 def get_device(force: str = "auto") -> torch.device:
@@ -26,7 +28,7 @@ def get_device(force: str = "auto") -> torch.device:
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def train_model(output_folder: Path, device: torch.device):
+def train_model(output_folder: Path, device: torch.device, trained_model):
 
     # Cargamos las direcciones de las imagenes y sus labels -> Train / Test / Val
     dataset_train = SignDataset("./dataset", "train")
@@ -38,14 +40,20 @@ def train_model(output_folder: Path, device: torch.device):
     val_loader = DataLoader(dataset_val, batch_size=10, shuffle=False, pin_memory=pin_memory)
 
     # Define the model, loss function, and optimizer
-    model = ConvolutionalNeuralNetwork(len(dataset_train.all_classes)).to(device)
+    # model = ConvolutionalNeuralNetwork(len(dataset_train.all_classes)).to(device)
+    model = timm.create_model(trained_model, pretrained=True, num_classes=20)
+    model = model.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.0001)
 
     # Training loop with validation and saving best weights
     num_epochs = 80
     best_val_loss = float("inf")
-    best_model_path = output_folder / "best_model.pth"
+    output_folder = Path(output_folder)
+    best_model_path = (
+        output_folder / "best_model_gait.pth"
+    ) 
+
 
     train_losses = []
     val_losses = []
@@ -53,20 +61,19 @@ def train_model(output_folder: Path, device: torch.device):
     for epoch in tqdm(range(num_epochs)):
         model.train()
         train_loss = 0
-        for batch_i in range(train_loader.batch_size):
-            for inputs, targets in train_loader:
-                # Forward pass
-                inputs_cuda = inputs[batch_i].to(device)
-                targets_cuda = targets[batch_i].to(device)
-                outputs = model(inputs_cuda, use_activation=False)
-                loss = criterion(outputs, targets_cuda)
+        for inputs, targets in tqdm(train_loader):
+            # Forward pass
+            inputs_cuda = inputs.to(device)
+            targets_cuda = targets.to(device)
+            outputs = model(inputs_cuda)
+            loss = criterion(outputs, targets_cuda)
 
-                train_loss += loss.item()
+            train_loss += loss.item()
 
-                # Backward pass and optimization
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
         train_loss /= len(train_loader)
         train_losses.append(train_loss)
@@ -112,12 +119,22 @@ def train_model(output_folder: Path, device: torch.device):
 
 if __name__ == "__main__":
     # Create output folder based on file folder
-    output_folder = Path(__file__).parent.parent.parent / "outs" / Path(__file__).parent.name
+    output_folder = Path(__file__).parent.parent.parent / "mute_demute/outs" / Path(__file__).parent.name
     output_folder.mkdir(exist_ok=True, parents=True)
 
+    with open("models.json", "r", encoding="utf-8") as m:
+        model_data = json.load(m)
     device = get_device("auto")  # choices are "auto", "cpu", "cuda"
     print(f"Using device: {device}")
-    train_model(output_folder, device=device)
+
+    modelos = model_data["models_to_evaluate"]
+
+    for model in modelos:
+        output_folder = f"./model_{model}"
+        # output_folder = os.path.join(output_folder, model)
+        os.makedirs(output_folder, exist_ok=True)
+        print("Training Timm model with: " + model)
+        train_model(output_folder, device=device, trained_model=model)
 
     # Set the seed for reproducibility
     torch.manual_seed(42)
