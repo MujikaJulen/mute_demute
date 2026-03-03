@@ -1,7 +1,7 @@
-import torch
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
@@ -9,7 +9,8 @@ from torchvision import transforms
 from tqdm import tqdm
 
 from .dataset import SignDataset
-from .model import CnnJulen, ConvolutionalNeuralNetwork      
+from .model import CnnJulen, ConvolutionalNeuralNetwork
+
 
 def get_device(force: str = "auto") -> torch.device:
     """Return a torch.device based on the `force` option.
@@ -24,11 +25,12 @@ def get_device(force: str = "auto") -> torch.device:
     # auto
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
 def train_model(output_folder: Path, device: torch.device):
 
     # Cargamos las direcciones de las imagenes y sus labels -> Train / Test / Val
-    dataset_train = SignDataset("./dataset","train")
-    dataset_val = SignDataset("./dataset","val")
+    dataset_train = SignDataset("./dataset", "train")
+    dataset_val = SignDataset("./dataset", "val")
 
     # Create DataLoaders for the datasets
     pin_memory = True if device.type == "cuda" else False
