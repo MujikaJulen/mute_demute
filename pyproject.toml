@@ -19,7 +19,9 @@ dependencies = [
     "seaborn",
     "scikit-image",
     "albumentations",
-    "tqdm",
+    # progress bar used throughout the training/evaluation scripts
+    # pining to a known-good version ensures reproducible installs
+    "tqdm>=4.67.3",
     "pytest",
     "ruff",
     "ipywidgets",
