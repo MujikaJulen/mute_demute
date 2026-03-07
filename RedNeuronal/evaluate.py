@@ -10,7 +10,6 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 import os
 import timm
-
 from .dataset import SignDataset
 
 def get_device(force: str = "auto") -> torch.device:
@@ -26,110 +25,95 @@ def get_device(force: str = "auto") -> torch.device:
     # auto
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def evaluate_and_plot(loader, model, dataset_name, output_folder, classes):
+def evaluate_and_plot(loader, model, dataset_name, output_folder, classes_dict, device):
     model.eval()
+    model.to(device) 
+    
     all_inputs = []
     all_outputs = []
     all_targets = []
 
     with torch.no_grad():
         for inputs, targets in loader:
+            inputs = inputs.to(device) 
             outputs = model(inputs)
             probs = torch.softmax(outputs, dim=1)
-            all_inputs.append(inputs.numpy())
-            all_outputs.append(probs.numpy())
+            all_inputs.append(inputs.cpu().numpy())
+            all_outputs.append(probs.cpu().numpy())
             all_targets.append(targets.numpy())
 
     all_inputs = np.concatenate(all_inputs)
     all_outputs = np.concatenate(all_outputs)
     all_targets = np.concatenate(all_targets)
 
-    # Lets plot the confusion matrix as a heatmap
-    indexes_of_outputs = []
-    for elements in all_outputs:
-        indexes_of_outputs.append(np.argmax(elements))
-    indexes_of_outputs = np.array(indexes_of_outputs)
+    indexes_of_outputs = np.argmax(all_outputs, axis=1) 
+    class_names = list(classes_dict.keys())
+    
+    ### CREAMOS LA CONFUSION MATRIX ###
+    cm = confusion_matrix(all_targets, indexes_of_outputs)
 
-    # Classes -> Dataset correspondiente
-    classes = classes.keys()
-    # Set the confusion matrix
-    map = confusion_matrix(all_targets, indexes_of_outputs)
-
-    # Plot and save the confusion matrix as a heatmap
-    plt.figure(figsize=(10, 8))
+    plt.figure(figsize=(12, 10))
     sns.heatmap(
-        map,
+        cm,
         annot=True,
         fmt="d",
         cmap="Blues",
-        xticklabels=classes,
-        yticklabels=classes,
+        xticklabels=class_names,
+        yticklabels=class_names,
     )
 
     plt.xlabel("Predicción")
     plt.ylabel("Objetivo")
-    plt.title("Matriz de Confusión Test")
-    plt.savefig(output_folder / f"confusion_matrix_{dataset_name}.png")
-    plt.show()
+    plt.title(f"Matriz de Confusión - {dataset_name}")
+    plt.savefig(output_folder / f"confusion_matrix_{dataset_name}.png", bbox_inches="tight")
+    plt.close()
 
-    # Let's obtain the accuracy, precision, recall and F1 score for the dataset
-    predictions = np.zeros(len(all_targets))
-    for i in range(len(all_targets)):
-        if all_targets[i] == all_outputs[i].argmax():
-            predictions[i] = 1
-        else:
-            predictions[i] = 0
-
-    # Calculate accuracy
-    accuracy = 100 * sum(predictions) / len(predictions)
-    print(f"Accuracy: {accuracy:.4f}%")
+    ### CALCULAMOS LOS PARÁMETROS ###
+    accuracy = 100 * np.mean(all_targets == indexes_of_outputs)
+    print(f"\nAccuracy: {accuracy:.4f}%")
 
     prec, rec, f1, support = precision_recall_fscore_support(
         all_targets, indexes_of_outputs, average=None
     )
 
-    print(f"{'CLASE':<10} {'PRECISION':<10} {'RECALL':<10} {'F1-SCORE':<10} {'CANTIDAD (Support)'}")
+    print(f"\n{'CLASE':<10} {'PRECISION':<10} {'RECALL':<10} {'F1-SCORE':<10} {'CANTIDAD'}")
     print("-" * 60)
-
-    for i in range(10):
-        print(
-            f"{classes[i]:<10} {prec[i]:.2f}       {rec[i]:.2f}       {f1[i]:.2f}       {support[i]}"
-        )
+    for i in range(len(class_names)):
+        print(f"{class_names[i]:<10} {prec[i]:.2f}       {rec[i]:.2f}       {f1[i]:.2f}       {support[i]}")
 
     metrics = {
-        "Accuracy": accuracy,
-        "Clase": classes,
+        "Clase": class_names,
         "Precision": prec,
         "Recall": rec,
         "F1-Score": f1,
         "Cantidad": support,
+        "Total Acuracy": accuracy
     }
-    return metrics
+    return metrics, accuracy
 
 
+### FUNCIÓN QUE GUARDA LOS PARÁMETROS ###
 def save_metrics_as_picture(metrics, filepath):
-    # Create a DataFrame
     df = pd.DataFrame(metrics)
+    df = df.round(4)
 
-    # Round the values to 6 decimal places
-    df = df.round(6)
-
-    # Plot the table and save as an image
-    fig, ax = plt.subplots(figsize=(16, 10))  # set size frame
+    fig, ax = plt.subplots(figsize=(10, len(df)*0.5 + 1)) 
     ax.axis("tight")
     ax.axis("off")
     table = ax.table(
         cellText=df.values, colLabels=df.columns, rowLabels=df.index, cellLoc="center", loc="center"
     )
     table.auto_set_font_size(False)
-    table.set_fontsize(14)
-    table.scale(1, 2.5)
+    table.set_fontsize(12)
+    table.scale(1, 1.5)
     plt.savefig(filepath, bbox_inches="tight", dpi=300)
+    plt.close()
 
 
 if __name__ == "__main__":
     with open("models.json", "r", encoding="utf-8") as m:
         model_data = json.load(m)
+        
     device = get_device("auto")
     print(f"Using device: {device}")
 
@@ -137,40 +121,42 @@ if __name__ == "__main__":
     img_size = model_data["image_size"]
 
     for n_model in range(len(modelos)):
-        models_folder = f"./trained_model/model_{modelos[n_model]}"
-        output_folder = f"./out_model"
-        # output_folder = os.path.join(output_folder, model)
-        os.makedirs(output_folder, exist_ok=True)
-        print("Evaluating model: " + modelos[n_model])
+        model_name = modelos[n_model]
+        image_model = img_size[n_model]
+        models_folder = Path(f"./trained_model/model_{model_name}")
+        output_folder = Path(f"./out_model/{model_name}")
+        output_folder.mkdir(parents=True, exist_ok=True)
+        
+        print(f"\nEvaluating model: {model_name}")
 
-        # Normalizamos los datos de entrada
-        test_transform = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
-        )
+        ### DEFINIMOS EL DATASET Y EL MODELO ###
+        test_transform = transforms.Compose([
+            transforms.Resize((image_model, image_model)), 
+            transforms.ToTensor(), 
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
 
-        # Generamos el Dataloader de test -> Validación del modelo
-        dataset_test_dir = SignDataset("./dataset", "test", image_size=img_size, transforms=test_transform)
+        dataset_test_dir = SignDataset("./dataset_filtered/dataset","test", image_size=img_size, transforms=test_transform)
 
         pin_memory = True if device.type == "cuda" else False
-        dataset_test = DataLoader(dataset_test_dir, batch_size=32, shuffle=True, pin_memory=pin_memory,
-                              num_workers=4, persistent_workers = True)
+        dataset_test = DataLoader(dataset_test_dir, batch_size=32, shuffle=False, pin_memory=pin_memory,
+                              num_workers=4, persistent_workers=True)
 
-        # Load the best model weights
-        model = timm.create_model(modelos[n_model], pretrained=True, num_classes=20)
-        model.load_state_dict(torch.load(output_folder / "best_model.pth"))
+        model = timm.create_model(model_name, pretrained=False, num_classes=len(dataset_test_dir.all_classes))
+        
+        weights_path = models_folder / "best_model_gait.pth"
+            
+        model.load_state_dict(torch.load(weights_path, map_location=device))
 
+        ### LAMAMOS A LA EVALUACION DEL MODELO ###
         metrics = {}
-        # Evaluate and plot for train, validation and test datasets
-        metrics["test"] = evaluate_and_plot(dataset_test, model, "test", output_folder, classes = dataset_test.all_classes, device)
+        metrics_dict, acc = evaluate_and_plot(dataset_test, model, "test", output_folder, dataset_test_dir.all_classes, device)
+        metrics["test"] = metrics_dict
 
-        # save  metrics as csv
-        pd.DataFrame(metrics["test"]).to_csv(output_folder / "metrics_test.csv")
-        pd.DataFrame(metrics).to_csv(output_folder / "metrics.csv")
+        # Guardamos en CSV
+        pd.DataFrame(metrics["test"]).to_csv(output_folder / "metrics_test.csv", index=False)
 
-        # Save the metrics as an image
+        # Guardamos como imagen
         save_metrics_as_picture(metrics["test"], output_folder / "metrics_test.png")
-
-        print(f"Evaluation on {modelos[n_model]} complete!")
-
-        # Set the seed for reproducibility
+        print(f"Evaluation on {model_name} complete! Test Accuracy: {acc:.2f}%")
         torch.manual_seed(42)
