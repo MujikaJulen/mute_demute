@@ -9,6 +9,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 # Importamos las clases locales
 from .dataset_LSE import LSEDataset
 from .model_LSE import LSEClassifier
+from .train_LSE import num_epochs
 
 def evaluate():
     # 1. Configuración de rutas y carpetas
@@ -32,7 +33,7 @@ def evaluate():
 
     # 3. Cargar el modelo entrenado
     model = LSEClassifier(output_dim=len(class_names)).to(device)
-    model_path = current_dir / "models" / "best_lse_model.pth"
+    model_path = current_dir / "models" / f"best_lse_model_{num_epochs}_epochs.pth"
 
     if not model_path.exists():
         print(f"Error: No se encontró el modelo en {model_path}. Ejecuta train.py primero.")
@@ -58,7 +59,7 @@ def evaluate():
     df_report = pd.DataFrame(report).transpose()
     
     # Guardar reporte en CSV
-    report_csv_path = output_folder / "metrics_report_lse.csv"
+    report_csv_path = output_folder / f"metrics_report_lse_{num_epochs}_epochs.csv"
     df_report.to_csv(report_csv_path)
     print(f"Reporte de métricas guardado en: {report_csv_path}")
     print("\n--- Resumen de Clasificación ---")
@@ -77,10 +78,10 @@ def evaluate():
     )
     plt.xlabel("Predicción (Modelo)")
     plt.ylabel("Realidad (Etiqueta)")
-    plt.title("Matriz de Confusión - Lenguaje de Señas Español")
+    plt.title(f"Matriz de Confusión a {num_epochs} épocas - Lenguaje de Señas Español")
     
     # Guardar la imagen en la carpeta outs
-    plot_path = output_folder / "confusion_matrix_lse.png"
+    plot_path = output_folder / f"confusion_matrix_lse_{num_epochs}_epochs.png"
     plt.savefig(plot_path)
     print(f"Matriz de confusión guardada en: {plot_path}")
     
