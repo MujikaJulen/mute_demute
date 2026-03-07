@@ -2,7 +2,7 @@
 ### OBJETIVO -> REDUCIR EL TAMAÑO DE LAS IMAGENES PARA QUE SEAN MÁS FÁCILES DE PROCESAR POR LA RED NEURONAL
 
 import os
-
+from pathlib import Path
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -96,8 +96,17 @@ def filter_images_by_size(dataset_folder, output_folder, scale_size=100):
                 img_scaled = skimage.transform.resize(image_segmented, (scale_size, scale_size))
                 img_scaled_uint8 = skimage.img_as_ubyte(img_scaled)  # Convierte a uint8
 
-                output_path = os.path.join(output_folder, image_file)  # o un nuevo nombre
+                output_path = os.path.join(output_folder, root)  # o un nuevo nombre
+                os.makedirs(output_path, exist_ok=True)  
+                output_path=os.path.join(output_path, image_file)
                 skimage.io.imsave(output_path, img_scaled_uint8)
 
                 # plt.imshow(img_scaled_uint8)
                 # plt.show()
+
+if __name__ == "__main__":
+    dataset_folder = Path("dataset")
+    output_folder = Path("dataset_filtered")
+    os.makedirs(output_folder, exist_ok=True)
+    filter_images_by_size(dataset_folder, output_folder, scale_size=400)
+

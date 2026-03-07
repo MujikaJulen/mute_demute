@@ -1,19 +1,32 @@
 from pathlib import Path
-
+import json
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import torch
 from sklearn.metrics import confusion_matrix, precision_recall_fscore_support
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torchvision import transforms
+import os
+import timm
 
-from .dataset import CIFAR10Dataset
-from .model import MultiLayerPerceptron_2
+from .dataset import SignDataset
 
+def get_device(force: str = "auto") -> torch.device:
+    """Return a torch.device based on the `force` option.
 
-def evaluate_and_plot(loader, model, dataset_name, output_folder):
+    force: 'auto'|'cpu'|'cuda' - when 'auto' will pick cuda if available.
+    """
+    force = force.lower()
+    if force == "cpu":
+        return torch.device("cpu")
+    if force == "cuda":
+        return torch.device("cuda")
+    # auto
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def evaluate_and_plot(loader, model, dataset_name, output_folder, classes):
     model.eval()
     all_inputs = []
     all_outputs = []
@@ -37,20 +50,8 @@ def evaluate_and_plot(loader, model, dataset_name, output_folder):
         indexes_of_outputs.append(np.argmax(elements))
     indexes_of_outputs = np.array(indexes_of_outputs)
 
-    # Classes of CIFAR-10 dataset
-    cifar10_classes = [
-        "Avión",
-        "Coche",
-        "Pájaro",
-        "Gato",
-        "Ciervo",
-        "Perro",
-        "Rana",
-        "Caballo",
-        "Barco",
-        "Camión",
-    ]
-
+    # Classes -> Dataset correspondiente
+    classes = classes.keys()
     # Set the confusion matrix
     map = confusion_matrix(all_targets, indexes_of_outputs)
 
@@ -61,13 +62,13 @@ def evaluate_and_plot(loader, model, dataset_name, output_folder):
         annot=True,
         fmt="d",
         cmap="Blues",
-        xticklabels=cifar10_classes,
-        yticklabels=cifar10_classes,
+        xticklabels=classes,
+        yticklabels=classes,
     )
 
     plt.xlabel("Predicción")
     plt.ylabel("Objetivo")
-    plt.title("Matriz de Confusión Test - CIFAR-10")
+    plt.title("Matriz de Confusión Test")
     plt.savefig(output_folder / f"confusion_matrix_{dataset_name}.png")
     plt.show()
 
@@ -92,23 +93,12 @@ def evaluate_and_plot(loader, model, dataset_name, output_folder):
 
     for i in range(10):
         print(
-            f"{cifar10_classes[i]:<10} {prec[i]:.2f}       {rec[i]:.2f}       {f1[i]:.2f}       {support[i]}"
+            f"{classes[i]:<10} {prec[i]:.2f}       {rec[i]:.2f}       {f1[i]:.2f}       {support[i]}"
         )
 
     metrics = {
         "Accuracy": accuracy,
-        "Clase": [
-            "Avión",
-            "Coche",
-            "Pájaro",
-            "Gato",
-            "Ciervo",
-            "Perro",
-            "Rana",
-            "Caballo",
-            "Barco",
-            "Camión",
-        ],
+        "Clase": classes,
         "Precision": prec,
         "Recall": rec,
         "F1-Score": f1,
@@ -138,41 +128,49 @@ def save_metrics_as_picture(metrics, filepath):
 
 
 if __name__ == "__main__":
-    output_folder = Path(__file__).parent.parent.parent / "outs" / Path(__file__).parent.name
-    output_folder.mkdir(exist_ok=True, parents=True)
-    # Set the seed for reproducibility
-    torch.manual_seed(42)
-    # Data augmentation
-    transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.0, 0.0, 0.0), (1.0, 1.0, 1.0))]
-    )
+    with open("models.json", "r", encoding="utf-8") as m:
+        model_data = json.load(m)
+    device = get_device("auto")
+    print(f"Using device: {device}")
 
-    # Cargas el bloque de 50k
-    full_train_data = CIFAR10Dataset("./data", train=True, transform=transform)
-    # Divides ese bloque en dos (90% entrenamiento, 10% validación interna)
-    train_subset, val_subset = random_split(full_train_data, [45000, 5000])
+    modelos = model_data["models_to_evaluate"]
+    img_size = model_data["image_size"]
 
-    # Cargas el bloque de 10k de test (con transform limpia, sin augmentation)
-    test_dataset = CIFAR10Dataset("./data", train=False, transform=transform)
+    for n_model in range(len(modelos)):
+        models_folder = f"./trained_model/model_{modelos[n_model]}"
+        output_folder = f"./out_model"
+        # output_folder = os.path.join(output_folder, model)
+        os.makedirs(output_folder, exist_ok=True)
+        print("Evaluating model: " + modelos[n_model])
 
-    # Create DataLoaders for the datasets
-    train_loader = DataLoader(train_subset, batch_size=2024, shuffle=True)
-    val_loader = DataLoader(val_subset, batch_size=2024, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=2024, shuffle=False)
+        # Normalizamos los datos de entrada
+        test_transform = transforms.Compose(
+            [transforms.ToTensor(), transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])]
+        )
 
-    # Load the best model weights
-    model = MultiLayerPerceptron_2(output_dim = 10)
-    model.load_state_dict(torch.load(output_folder / "best_model.pth"))
+        # Generamos el Dataloader de test -> Validación del modelo
+        dataset_test_dir = SignDataset("./dataset", "test", image_size=img_size, transforms=test_transform)
 
-    metrics = {}
-    # Evaluate and plot for train, validation and test datasets
-    metrics["test"] = evaluate_and_plot(test_loader, model, "test", output_folder)
+        pin_memory = True if device.type == "cuda" else False
+        dataset_test = DataLoader(dataset_test_dir, batch_size=32, shuffle=True, pin_memory=pin_memory,
+                              num_workers=4, persistent_workers = True)
 
-    # save  metrics as csv
-    pd.DataFrame(metrics["test"]).to_csv(output_folder / "metrics_test.csv")
-    pd.DataFrame(metrics).to_csv(output_folder / "metrics.csv")
+        # Load the best model weights
+        model = timm.create_model(modelos[n_model], pretrained=True, num_classes=20)
+        model.load_state_dict(torch.load(output_folder / "best_model.pth"))
 
-    # Save the metrics as an image
-    save_metrics_as_picture(metrics["test"], output_folder / "metrics_test.png")
+        metrics = {}
+        # Evaluate and plot for train, validation and test datasets
+        metrics["test"] = evaluate_and_plot(dataset_test, model, "test", output_folder, classes = dataset_test.all_classes, device)
 
-    print("Evaluation complete!")
+        # save  metrics as csv
+        pd.DataFrame(metrics["test"]).to_csv(output_folder / "metrics_test.csv")
+        pd.DataFrame(metrics).to_csv(output_folder / "metrics.csv")
+
+        # Save the metrics as an image
+        save_metrics_as_picture(metrics["test"], output_folder / "metrics_test.png")
+
+        print(f"Evaluation on {modelos[n_model]} complete!")
+
+        # Set the seed for reproducibility
+        torch.manual_seed(42)

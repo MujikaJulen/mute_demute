@@ -1,19 +1,17 @@
 import os
-
-import matplotlib
-import skimage.io
-import skimage.transform
+from PIL import Image
 import torch
 from torch.utils.data import Dataset
-
-from RedNeuronal.image_filtering import segmentation
+import numpy as np
 
 
 class SignDataset(Dataset):
-    def __init__(self, dataset_folder, split="train"):
+    def __init__(self, dataset_folder, split="train", image_size=224, transforms=None):
         self.samples = []
         split_folder = os.path.join(dataset_folder, split)
         self.all_classes = {}
+        self.image_size = image_size
+        self.transforms = transforms
 
         for ABC in os.listdir(split_folder):
             ABC_path = os.path.join(split_folder, ABC)
@@ -30,12 +28,16 @@ class SignDataset(Dataset):
 
     def __getitem__(self, idx):
         image_path, label = self.samples[idx]
-        image = segmentation(image_path).astype("float32")
-        image = torch.from_numpy(image).permute(2, 0, 1)
+        image = Image.open(image_path).convert("RGB")
+        if self.transforms is not None:
+            image = self.transforms(image) 
+        else:
+            image = np.array(image).astype("float32") / 255.0
+            image = torch.from_numpy(image).permute(2, 0, 1)
         label = self.all_classes[label]
         return image, label
 
 
-# if __name__ == "__main__":
-#    train = SignDataset("./dataset","train")
-#    print("Hola")
+#if __name__ == "__main__":
+#   train = SignDataset("./dataset","train")
+#   print("Hola")
