@@ -9,8 +9,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
 from .dataset import SignDataset
+from .model import EncoderWithClassifier
 
 DEFAULT_IMAGE_SIZE = 224
 
@@ -41,29 +41,8 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
     train_loader = DataLoader(dataset_train, batch_size=10, shuffle=True, pin_memory=pin_memory)
     val_loader = DataLoader(dataset_val, batch_size=10, shuffle=False, pin_memory=pin_memory)
 
-    # Define the model, loss function, and optimizer
-    # model = ConvolutionalNeuralNetwork(len(dataset_train.all_classes)).to(device)
-    model = timm.create_model(trained_model, pretrained=False, num_classes=20)
-    model = model.to(device)
-
-    # Cargar pesos de encoder preentrenados si existen (pretrain.py genera estos checkpoints).
-    encoder_checkpoint = Path("outs") / "pretrain" / trained_model / "encoder_best.pth"
-    if encoder_checkpoint.exists():
-        try:
-            encoder_state = torch.load(encoder_checkpoint, map_location=device)
-            # Muchos autoencoders basados en timm guardan el encoder con prefijo "model." (FeatureGetterNet).
-            # Para cargar en el modelo de clasificación, removemos ese prefijo cuando exista.
-            fixed_state = {
-                (k[6:] if k.startswith("model.") else k): v
-                for k, v in encoder_state.items()
-            }
-            model.load_state_dict(fixed_state, strict=False)
-            print(f"Loaded pretrained encoder weights from {encoder_checkpoint}")
-        except Exception as e:
-            print(f"Warning: could not load pretrained encoder weights: {e}")
-    else:
-        print(f"No encoder pretrained weights found at {encoder_checkpoint}, training from scratch.")
-
+    ### ViT Hugging Face ###
+    model = EncoderWithClassifier(hidden_size=384, num_labels=19, freeze_encoder=True)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.0001)
 
@@ -74,11 +53,8 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
     best_model_path = (
         output_folder / "best_model_gait.pth"
     ) 
-
-
     train_losses = []
     val_losses = []
-
     for epoch in tqdm(range(num_epochs)):
         model.train()
         train_loss = 0
@@ -88,9 +64,7 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
             targets_cuda = targets.to(device)
             outputs = model(inputs_cuda)
             loss = criterion(outputs, targets_cuda)
-
             train_loss += loss.item()
-
             # Backward pass and optimization
             optimizer.zero_grad()
             loss.backward()

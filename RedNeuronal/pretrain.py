@@ -8,9 +8,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from transformers import ViTMAEConfig, ViTMAEForPreTraining
 
 from .dataset import SignDataset
-from .model import TimmAutoEncoder
 
 
 def get_device(force: str = "auto") -> torch.device:
@@ -47,20 +47,24 @@ def train_autoencoder(
     learning_rate: float = 1e-4,
     image_size: int = 224,
 ):
-    """Entrena un autoencoder (encoder-decoder) para el modelo timm especificado.
-
-    El objetivo es preentrenar el encoder en modo autodecodificador para que las
-    capas convolucionales aprendan una buena representación de las imágenes.
-    """
-
     train_loader, val_loader, train_ds = _make_loaders(dataset_folder, batch_size, device, image_size)
 
     sample_img, _ = train_ds[0]
     input_shape = tuple(sample_img.shape)
 
-    model = TimmAutoEncoder( model_name="vit_small_patch16_224", pretrained=True, input_shape=(3, 224, 224), mask_ratio=0.4).to(device)
+    ### ViT Hugging Face ###
+    config = ViTMAEConfig(
+        image_size=image_size,
+        patch_size=16,
+        hidden_size=384,          
+        num_hidden_layers=12,     
+        num_attention_heads=6,    
+        decoder_hidden_size=256,  
+        mask_ratio=0.40           
+    )
+    
+    model = ViTMAEForPreTraining(config).to(device)
 
-    criterion = nn.MSELoss()
     optimizer = optim.AdamW(model.parameters(), lr=learning_rate)
 
     output_folder = Path(output_folder)
@@ -73,23 +77,20 @@ def train_autoencoder(
     train_losses = []
     val_losses = []
 
+    patience = 5
+    epochs_no_improve = 0
+
     for epoch in range(num_epochs):
        
         model.train()
         train_loss = 0.0
         for inputs, _ in tqdm(train_loader, desc=f"Train [{model_name}] Epoch {epoch+1}/{num_epochs}"):
-            inputs = inputs.to(device, dtype=torch.float32)
-            
-            outputs, mask = model(inputs) 
-            
-            loss_matrix = (outputs - inputs) ** 2 
-            
-            loss = (loss_matrix * mask).sum() / (mask.sum() + 1e-8)
-
+            inputs = inputs.to(device, dtype=torch.float32) 
             optimizer.zero_grad()
+            outputs = model(pixel_values=inputs)
+            loss = outputs.loss 
             loss.backward()
             optimizer.step()
-
             train_loss += loss.item()
 
         train_loss /= len(train_loader)
@@ -100,12 +101,8 @@ def train_autoencoder(
         with torch.no_grad():
             for inputs, _ in val_loader:
                 inputs = inputs.to(device, dtype=torch.float32)
-                
-                outputs, mask = model(inputs)
-                
-                loss_matrix = (outputs - inputs) ** 2
-                loss = (loss_matrix * mask).sum() / (mask.sum() + 1e-8)
-                
+                outputs = model(pixel_values=inputs)
+                loss = outputs.loss
                 val_loss += loss.item()
 
         val_loss /= len(val_loader)
@@ -113,14 +110,23 @@ def train_autoencoder(
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
+            epochs_no_improve = 0
             torch.save(model.state_dict(), best_checkpoint_path)
-            torch.save(model.encoder.state_dict(), best_encoder_path)
+            torch.save(model.vit.state_dict(), best_encoder_path)
 
-        if (epoch + 1) % 10 == 0 or epoch == num_epochs - 1:
+        else: 
+            epochs_no_improve += 1
+            print(f"Sin mejora en validación. Patience: {epochs_no_improve}/{patience}")
+
+        if (epoch + 1) % 10 == 0 or epoch == num_epochs - 1 or epochs_no_improve >= patience:
             print(
                 f"[{model_name}] Epoch {epoch+1}/{num_epochs} - "
                 f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} (best={best_val_loss:.4f})"
             )
+
+        if epochs_no_improve >= patience:
+            print(f"Early Stopping activado en la época {epoch+1}. El modelo dejó de mejorar.")
+            break
 
     print(f"Pretraining completed for {model_name}. Best val loss {best_val_loss:.4f}")
     print(f"Saved best autoencoder: {best_checkpoint_path}")

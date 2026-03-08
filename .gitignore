@@ -169,4 +169,4 @@ cython_debug/
 # outs/
 # *.mat
 dataset
-filtered_dataset
+dataset_filtered

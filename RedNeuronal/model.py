@@ -13,7 +13,7 @@ Ejemplo:
 """
 
 from __future__ import annotations
-
+from transformers import ViTMAEForPreTraining
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -108,10 +108,24 @@ class TimmAutoEncoder(nn.Module):
             out = F.interpolate(out, size=x.shape[2:], mode="bilinear", align_corners=False)
         return out
 
+class EncoderWithClassifier(nn.Module):
 
-if __name__ == "__main__":
-    # Ejemplo mínimo de uso.
-    model = TimmAutoEncoder("resnet18", pretrained=False, input_shape=(3, 100, 100))
-    x = torch.randn(2, 3, 100, 100)
-    y = model(x)
-    print("input:", x.shape, "output:", y.shape)
+    def init(self, encoder, hidden_size, num_labels, freeze_encoder=True):
+        super().init()
+        mae = ViTMAEForPreTraining.from_pretrained(".outs/pretrain/vit_small_patch16_224/autoencoder_best.pth")
+        encoder = mae.vit
+        self.encoder = encoder
+        for param in self.vit.parameters():
+            param.requires_grad = False
+        self.classifier = nn.Linear(hidden_size, num_labels)
+
+    def forward(self, input_ids, attention_mask):
+
+        outputs = self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+        hidden = outputs.last_hidden_state           
+        pooled = hidden.mean(dim=1)                  
+        logits = self.classifier(pooled)             
+        return logits
