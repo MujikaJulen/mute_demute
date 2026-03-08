@@ -10,10 +10,11 @@ from RedNeuronal.image_filtering import segmentation
 
 
 class SignDataset(Dataset):
-    def __init__(self, dataset_folder, split="train"):
+    def __init__(self, dataset_folder, split="train", segmentated=False):
         self.samples = []
         split_folder = os.path.join(dataset_folder, split)
         self.all_classes = {}
+        self.segmentated = segmentated
 
         for ABC in os.listdir(split_folder):
             ABC_path = os.path.join(split_folder, ABC)
@@ -30,7 +31,10 @@ class SignDataset(Dataset):
 
     def __getitem__(self, idx):
         image_path, label = self.samples[idx]
-        image = segmentation(image_path).astype("float32")
+        if self.segmentated:
+            image = segmentation(image_path).astype("float32")
+        else:
+            image = skimage.io.imread(image_path).astype("float32")
         image = torch.from_numpy(image).permute(2, 0, 1)
         label = self.all_classes[label]
         return image, label
