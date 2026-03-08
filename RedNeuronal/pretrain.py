@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from torchvision import transforms
 from pathlib import Path
 
 import torch
@@ -27,8 +28,21 @@ def get_device(force: str = "auto") -> torch.device:
 
 
 def _make_loaders(dataset_folder: str, batch_size: int, device: torch.device, image_size: int):
-    train_ds = SignDataset(dataset_folder, "train", segmentated=True, image_size=image_size)
-    val_ds = SignDataset(dataset_folder, "val", segmentated=True, image_size=image_size)
+    train_transforms = transforms.Compose([
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomRotation(degrees=15),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        transforms.ToTensor(),         
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    val_transforms = transforms.Compose([
+        transforms.ToTensor(),         
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    train_ds = SignDataset(dataset_folder, "train", segmentated=True, image_size=image_size, transforms=train_transforms)
+    val_ds = SignDataset(dataset_folder, "val", segmentated=True, image_size=image_size, transforms=val_transforms)
 
     pin_memory = True if device.type == "cuda" else False
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, pin_memory=pin_memory)
@@ -167,7 +181,7 @@ def main():
         help="Device where to run training.",
     )
     parser.add_argument("--epochs", type=int, default=40, help="Number of pretraining epochs.")
-    parser.add_argument("--batch-size", type=int, default=16, help="Batch size for pretraining.")
+    parser.add_argument("--batch-size", type=int, default=32, help="Batch size for pretraining.")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate for pretraining.")
     parser.add_argument(
         "--image-size",

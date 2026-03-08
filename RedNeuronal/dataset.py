@@ -16,12 +16,14 @@ class SignDataset(Dataset):
         split="train",
         segmentated=False,
         image_size: int | None = 224,
+        transforms=None
     ):
         self.samples = []
         split_folder = os.path.join(dataset_folder, split)
         self.all_classes = {}
         self.segmentated = segmentated
         self.image_size = image_size
+        self.transforms = transforms
 
         for ABC in os.listdir(split_folder):
             ABC_path = os.path.join(split_folder, ABC)
