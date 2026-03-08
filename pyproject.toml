@@ -33,6 +33,7 @@ dependencies = [
     "ipykernel",
     "stringzilla<=4.0.0",
     "plotly>=6.3.1",
+    "timm"
 ]
 
 

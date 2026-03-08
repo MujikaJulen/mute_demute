@@ -11,7 +11,7 @@ import tqdm
 from skimage.morphology import disk
 
 
-def segmentation(image_path_raw, scale_size=100):
+def segmentation(image_path_raw, scale_size: int | None = 100):
     image = skimage.io.imread(image_path_raw)
 
     scale_factor = 0.05
@@ -30,7 +30,7 @@ def segmentation(image_path_raw, scale_size=100):
     regions = skimage.measure.regionprops(labeled_img)
     region = max(
         regions, key=lambda r: r.area
-    )  # Coge la región más grande, que debería ser la que contiene la mano, no entiendo muy bien como va r y por que es una variable local si yo no la he definido. REVISAR
+    )  # Coge la región más grande, que debería ser la que contiene la mano
     min_row, min_col, max_row, max_col = region.bbox
     min_row = int(min_row / scale_factor)
     min_col = int(min_col / scale_factor)
@@ -41,6 +41,9 @@ def segmentation(image_path_raw, scale_size=100):
         image_segmented = image[min_row:max_row, min_col : min_col + (max_row - min_row)]
     else:
         image_segmented = image[min_row : min_row + (max_col - min_col), min_col:max_col]
+
+    if scale_size is None:
+        return image_segmented
 
     img_scaled = skimage.transform.resize(image_segmented, (scale_size, scale_size))
     img_scaled_uint8 = skimage.img_as_ubyte(img_scaled)  # Convierte a uint8

@@ -7,11 +7,12 @@ import timm
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
-from torchvision import transforms
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from .dataset import SignDataset
+
+DEFAULT_IMAGE_SIZE = 224
 
 
 def get_device(force: str = "auto") -> torch.device:
@@ -31,8 +32,9 @@ def get_device(force: str = "auto") -> torch.device:
 def train_model(output_folder: Path, device: torch.device, trained_model):
 
     # Cargamos las direcciones de las imagenes y sus labels -> Train / Test / Val
-    dataset_train = SignDataset("./dataset", "train")
-    dataset_val = SignDataset("./dataset", "val")
+    # Usamos la misma segmentación/resizing que el pretraining para mantener la distribución.
+    dataset_train = SignDataset("./dataset", "train", segmentated=True, image_size=DEFAULT_IMAGE_SIZE)
+    dataset_val = SignDataset("./dataset", "val", segmentated=True, image_size=DEFAULT_IMAGE_SIZE)
 
     # Create DataLoaders for the datasets
     pin_memory = True if device.type == "cuda" else False
@@ -41,8 +43,27 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
 
     # Define the model, loss function, and optimizer
     # model = ConvolutionalNeuralNetwork(len(dataset_train.all_classes)).to(device)
-    model = timm.create_model(trained_model, pretrained=True, num_classes=20)
+    model = timm.create_model(trained_model, pretrained=False, num_classes=20)
     model = model.to(device)
+
+    # Cargar pesos de encoder preentrenados si existen (pretrain.py genera estos checkpoints).
+    encoder_checkpoint = Path("outs") / "pretrain" / trained_model / "encoder_best.pth"
+    if encoder_checkpoint.exists():
+        try:
+            encoder_state = torch.load(encoder_checkpoint, map_location=device)
+            # Muchos autoencoders basados en timm guardan el encoder con prefijo "model." (FeatureGetterNet).
+            # Para cargar en el modelo de clasificación, removemos ese prefijo cuando exista.
+            fixed_state = {
+                (k[6:] if k.startswith("model.") else k): v
+                for k, v in encoder_state.items()
+            }
+            model.load_state_dict(fixed_state, strict=False)
+            print(f"Loaded pretrained encoder weights from {encoder_checkpoint}")
+        except Exception as e:
+            print(f"Warning: could not load pretrained encoder weights: {e}")
+    else:
+        print(f"No encoder pretrained weights found at {encoder_checkpoint}, training from scratch.")
+
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.0001)
 
@@ -63,7 +84,7 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
         train_loss = 0
         for inputs, targets in tqdm(train_loader):
             # Forward pass
-            inputs_cuda = inputs.to(device)
+            inputs_cuda = inputs.to(device, dtype=torch.float32) / 255.0
             targets_cuda = targets.to(device)
             outputs = model(inputs_cuda)
             loss = criterion(outputs, targets_cuda)
@@ -83,7 +104,7 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
         val_loss = 0
         with torch.no_grad():
             for inputs, targets in val_loader:
-                inputs_cuda = inputs.to(device)
+                inputs_cuda = inputs.to(device, dtype=torch.float32) / 255.0
                 targets_cuda = targets.to(device)
                 outputs = model(inputs_cuda, use_activation=False)
                 loss = criterion(outputs, targets_cuda)
