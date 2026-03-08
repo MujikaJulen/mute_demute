@@ -11,7 +11,7 @@ from .dataset_LSE import LSEDataset
 from .model_LSE import LSEClassifier
 
 # Número de épocas para el entrenamiento
-num_epochs = 60
+num_epochs = 5
 
 
 def get_device(force: str = "auto") -> torch.device:
@@ -31,7 +31,7 @@ def train_model(output_folder: Path, models_folder: Path, device: torch.device):
     val_csv = current_dir / "val_lse.csv"
 
     if not train_csv.exists() or not val_csv.exists():
-        raise FileNotFoundError("❌ No se encuentran los archivos CSV. Ejecuta create_lse_dataset.py primero.")
+        raise FileNotFoundError("No se encuentran los archivos CSV. Ejecuta create_lse_dataset.py primero.")
 
     dataset_train = LSEDataset(train_csv)
     dataset_val = LSEDataset(val_csv, label_encoder=dataset_train.label_encoder)
@@ -116,8 +116,8 @@ def train_model(output_folder: Path, models_folder: Path, device: torch.device):
         if (epoch + 1) % 5 == 0:
             print(f" >> [Epoch {epoch+1}] Loss: T {avg_train_loss:.4f} | V {avg_val_loss:.4f} | Acc: {acc:.2f}%")
 
-    print(f"\n✅ Entrenamiento finalizado. Mejor Acc: {best_val_acc:.2f}%")
-    print(f"📦 Modelo guardado en: {best_model_path}")
+    print(f"\nEntrenamiento finalizado. Mejor Acc: {best_val_acc:.2f}%")
+    print(f"Modelo guardado en: {best_model_path}")
 
     # Generamos gráficas en la ruta absoluta de outs
     plot_training_history(history, output_folder)
@@ -150,7 +150,7 @@ def plot_training_history(history, output_folder):
     # GUARDADO EN LA RUTA ESPECÍFICA
     save_path = output_folder / f"loss_and_accuracy_plots_{len(history['train_loss'])}_epochs.png"
     plt.savefig(save_path)
-    print(f"🖼️ Gráficas guardadas en: {save_path}")
+    print(f"Gráficas guardadas en: {save_path}")
     plt.show()
 
 
@@ -166,7 +166,7 @@ if __name__ == "__main__":
     output_folder.mkdir(exist_ok=True, parents=True)
 
     device = get_device("auto")
-    print(f"🚀 Usando dispositivo: {device}")
+    print(f"Usando dispositivo: {device}")
     
     torch.manual_seed(42)
     
