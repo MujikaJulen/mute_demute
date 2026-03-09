@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torchvision import transforms
 from tqdm import tqdm
 from .dataset import SignDataset
 from .model import EncoderWithClassifier
@@ -33,21 +34,36 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
 
     # Cargamos las direcciones de las imagenes y sus labels -> Train / Test / Val
     # Usamos la misma segmentación/resizing que el pretraining para mantener la distribución.
-    dataset_train = SignDataset("./dataset", "train", segmentated=True, image_size=DEFAULT_IMAGE_SIZE)
-    dataset_val = SignDataset("./dataset", "val", segmentated=True, image_size=DEFAULT_IMAGE_SIZE)
+    train_transforms = transforms.Compose([
+        transforms.RandomHorizontalFlip(p=0.5),
+        transforms.RandomRotation(degrees=15),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2),
+        transforms.ToTensor(),         
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    val_transforms = transforms.Compose([
+        transforms.ToTensor(),         
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+
+    dataset_train = SignDataset("./dataset_filtered/dataset", "train", segmentated=False, image_size=DEFAULT_IMAGE_SIZE, transforms=train_transforms)
+    dataset_val = SignDataset("./dataset_filtered/dataset", "val", segmentated=False, image_size=DEFAULT_IMAGE_SIZE, transforms=val_transforms)
 
     # Create DataLoaders for the datasets
     pin_memory = True if device.type == "cuda" else False
-    train_loader = DataLoader(dataset_train, batch_size=10, shuffle=True, pin_memory=pin_memory)
-    val_loader = DataLoader(dataset_val, batch_size=10, shuffle=False, pin_memory=pin_memory)
+
+    train_loader = DataLoader(dataset_train, batch_size=32, shuffle=True, pin_memory=pin_memory, num_workers = 8)
+    val_loader = DataLoader(dataset_val, batch_size=32, shuffle=False, pin_memory=pin_memory, num_workers = 8)
 
     ### ViT Hugging Face ###
     model = EncoderWithClassifier(hidden_size=384, num_labels=19, freeze_encoder=True)
+    model = model.to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.0001)
 
     # Training loop with validation and saving best weights
-    num_epochs = 80
+    num_epochs = 15
     best_val_loss = float("inf")
     output_folder = Path(output_folder)
     best_model_path = (
@@ -60,9 +76,9 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
         train_loss = 0
         for inputs, targets in tqdm(train_loader):
             # Forward pass
-            inputs_cuda = inputs.to(device, dtype=torch.float32) / 255.0
+            inputs_cuda = inputs.to(device, dtype=torch.float32)
             targets_cuda = targets.to(device)
-            outputs = model(inputs_cuda)
+            outputs = model(inputs_cuda) 
             loss = criterion(outputs, targets_cuda)
             train_loss += loss.item()
             # Backward pass and optimization
@@ -78,9 +94,9 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
         val_loss = 0
         with torch.no_grad():
             for inputs, targets in val_loader:
-                inputs_cuda = inputs.to(device, dtype=torch.float32) / 255.0
+                inputs_cuda = inputs.to(device, dtype=torch.float32)
                 targets_cuda = targets.to(device)
-                outputs = model(inputs_cuda, use_activation=False)
+                outputs = model(inputs_cuda)
                 loss = criterion(outputs, targets_cuda)
                 val_loss += loss.item()
 
@@ -91,7 +107,7 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
             best_val_loss = val_loss
             torch.save(model.state_dict(), best_model_path)
 
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 5 == 0:
             print(
                 f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}"
             )
@@ -110,26 +126,20 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
     # Save the plot to the outs/ folder
     plt.savefig(output_folder / "loss_plot.png")
     plt.savefig(output_folder / "loss_plot.png")
+    plt.close()
 
 
 if __name__ == "__main__":
+    # Set the seed for reproducibility
+    torch.manual_seed(42)
     # Create output folder based on file folder
     output_folder = Path(__file__).parent.parent.parent / "mute_demute/outs" / Path(__file__).parent.name
     output_folder.mkdir(exist_ok=True, parents=True)
-
-    with open("models.json", "r", encoding="utf-8") as m:
-        model_data = json.load(m)
     device = get_device("auto")  # choices are "auto", "cpu", "cuda"
     print(f"Using device: {device}")
-
-    modelos = model_data["models_to_evaluate"]
-
-    for model in modelos:
-        output_folder = f"./model_{model}"
-        # output_folder = os.path.join(output_folder, model)
-        os.makedirs(output_folder, exist_ok=True)
-        print("Training Timm model with: " + model)
-        train_model(output_folder, device=device, trained_model=model)
-
-    # Set the seed for reproducibility
-    torch.manual_seed(42)
+    model = "vit_small_patch16_224"
+    output_folder = f"./model_{model}"
+    # output_folder = os.path.join(output_folder, model)
+    os.makedirs(output_folder, exist_ok=True)
+    print("Training Timm model with: " + model)
+    train_model(output_folder, device=device, trained_model=model)

@@ -5,7 +5,9 @@ import skimage.io
 import skimage.transform
 import torch
 from torch.utils.data import Dataset
-
+import torchvision.transforms as T
+from PIL import Image
+import numpy as np
 from RedNeuronal.image_filtering import segmentation
 
 
@@ -41,9 +43,9 @@ class SignDataset(Dataset):
     def __getitem__(self, idx):
         image_path, label = self.samples[idx]
         if self.segmentated:
-            image = segmentation(image_path, scale_size=self.image_size).astype("float32")
+            image = segmentation(image_path, scale_size=self.image_size)
         else:
-            image = skimage.io.imread(image_path).astype("float32")
+            image = skimage.io.imread(image_path)
             # Resize all images to a consistent resolution for the model.
             if self.image_size is not None and (
                 image.shape[0] != self.image_size or image.shape[1] != self.image_size
@@ -53,11 +55,18 @@ class SignDataset(Dataset):
                     (self.image_size, self.image_size),
                     preserve_range=True,
                     anti_aliasing=True,
-                ).astype("float32")
+                )
+            image = image.astype(np.uint8)
+            image_pil = Image.fromarray(image)
 
-        image = torch.from_numpy(image).permute(2, 0, 1)
-        label = self.all_classes[label]
-        return image, label
+            if self.transforms is not None:
+                image_final = self.transforms(image_pil) 
+            else:
+                image_final = T.ToTensor()(image_pil)
+                
+            label = self.all_classes[label]
+            
+            return image_final, label
 
 
 # if __name__ == "__main__":

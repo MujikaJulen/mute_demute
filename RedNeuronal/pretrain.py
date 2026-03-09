@@ -41,12 +41,12 @@ def _make_loaders(dataset_folder: str, batch_size: int, device: torch.device, im
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    train_ds = SignDataset(dataset_folder, "train", segmentated=True, image_size=image_size, transforms=train_transforms)
-    val_ds = SignDataset(dataset_folder, "val", segmentated=True, image_size=image_size, transforms=val_transforms)
+    train_ds = SignDataset(dataset_folder, "train", segmentated=False, image_size=image_size, transforms=train_transforms)
+    val_ds = SignDataset(dataset_folder, "val", segmentated=False, image_size=image_size, transforms=val_transforms)
 
     pin_memory = True if device.type == "cuda" else False
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, pin_memory=pin_memory)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, pin_memory=pin_memory)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, pin_memory=pin_memory, num_workers=8)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, pin_memory=pin_memory, num_workers=8)
 
     return train_loader, val_loader, train_ds
 
@@ -94,7 +94,7 @@ def train_autoencoder(
     patience = 5
     epochs_no_improve = 0
 
-    for epoch in range(num_epochs):
+    for epoch in tqdm(range(num_epochs)):
        
         model.train()
         train_loss = 0.0

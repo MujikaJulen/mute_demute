@@ -1,0 +1,11 @@
+{
+  "model_name": "vit_small_patch16_224",
+  "input_shape": [
+    3,
+    224,
+    224
+  ],
+  "num_epochs": 40,
+  "batch_size": 32,
+  "learning_rate": 0.0001
+}
