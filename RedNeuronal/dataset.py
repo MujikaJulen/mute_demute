@@ -1,29 +1,15 @@
 import os
-
-import matplotlib
-import skimage.io
-import skimage.transform
+from PIL import Image
 import torch
 from torch.utils.data import Dataset
-import torchvision.transforms as T
-from PIL import Image
 import numpy as np
-from RedNeuronal.image_filtering import segmentation
 
 
 class SignDataset(Dataset):
-    def __init__(
-        self,
-        dataset_folder,
-        split="train",
-        segmentated=False,
-        image_size: int | None = 224,
-        transforms=None
-    ):
+    def __init__(self, dataset_folder, split="train", image_size=224, transforms=None):
         self.samples = []
         split_folder = os.path.join(dataset_folder, split)
         self.all_classes = {}
-        self.segmentated = segmentated
         self.image_size = image_size
         self.transforms = transforms
 
@@ -42,33 +28,16 @@ class SignDataset(Dataset):
 
     def __getitem__(self, idx):
         image_path, label = self.samples[idx]
-        if self.segmentated:
-            image = segmentation(image_path, scale_size=self.image_size)
+        image = Image.open(image_path).convert("RGB")
+        if self.transforms is not None:
+            image = self.transforms(image) 
         else:
-            image = skimage.io.imread(image_path)
-            # Resize all images to a consistent resolution for the model.
-            if self.image_size is not None and (
-                image.shape[0] != self.image_size or image.shape[1] != self.image_size
-            ):
-                image = skimage.transform.resize(
-                    image,
-                    (self.image_size, self.image_size),
-                    preserve_range=True,
-                    anti_aliasing=True,
-                )
-            image = image.astype(np.uint8)
-            image_pil = Image.fromarray(image)
-
-            if self.transforms is not None:
-                image_final = self.transforms(image_pil) 
-            else:
-                image_final = T.ToTensor()(image_pil)
-                
-            label = self.all_classes[label]
-            
-            return image_final, label
+            image = np.array(image).astype("float32") / 255.0
+            image = torch.from_numpy(image).permute(2, 0, 1)
+        label = self.all_classes[label]
+        return image, label
 
 
-# if __name__ == "__main__":
-#    train = SignDataset("./dataset","train")
-#    print("Hola")
+#if __name__ == "__main__":
+#   train = SignDataset("./dataset","train")
+#   print("Hola")

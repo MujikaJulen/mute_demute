@@ -38,32 +38,34 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(degrees=15),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
-        transforms.ToTensor(),         
+        transforms.ToTensor(),    
+        transforms.Resize((224, 224)),   
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
     val_transforms = transforms.Compose([
-        transforms.ToTensor(),         
+        transforms.ToTensor(),      
+        transforms.Resize((224, 224)),   
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    dataset_train = SignDataset("./dataset_filtered/dataset", "train", segmentated=False, image_size=DEFAULT_IMAGE_SIZE, transforms=train_transforms)
-    dataset_val = SignDataset("./dataset_filtered/dataset", "val", segmentated=False, image_size=DEFAULT_IMAGE_SIZE, transforms=val_transforms)
+    dataset_train = SignDataset("./dataset_filtered/dataset", "train", image_size=DEFAULT_IMAGE_SIZE, transforms=train_transforms)
+    dataset_val = SignDataset("./dataset_filtered/dataset", "val", image_size=DEFAULT_IMAGE_SIZE, transforms=val_transforms)
 
     # Create DataLoaders for the datasets
     pin_memory = True if device.type == "cuda" else False
 
     train_loader = DataLoader(dataset_train, batch_size=32, shuffle=True, pin_memory=pin_memory, num_workers = 8)
-    val_loader = DataLoader(dataset_val, batch_size=32, shuffle=False, pin_memory=pin_memory, num_workers = 8)
+    val_loader = DataLoader(dataset_val, batch_size=32, shuffle=True, pin_memory=pin_memory, num_workers = 8)
 
     ### ViT Hugging Face ###
-    model = EncoderWithClassifier(hidden_size=384, num_labels=19, freeze_encoder=True)
+    model = EncoderWithClassifier(hidden_size=384, num_labels=19, freeze_encoder= False)
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=0.0001)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-4)
 
     # Training loop with validation and saving best weights
-    num_epochs = 15
+    num_epochs = 30
     best_val_loss = float("inf")
     output_folder = Path(output_folder)
     best_model_path = (

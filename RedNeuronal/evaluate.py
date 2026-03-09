@@ -11,7 +11,7 @@ from torchvision import transforms
 import os
 import timm
 from .dataset import SignDataset
-from model import EncoderWithClassifier
+from .model import EncoderWithClassifier
 
 def get_device(force: str = "auto") -> torch.device:
     """Return a torch.device based on the `force` option.
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     print(f"Using device: {device}")  
     model_name = "vit_small_patch16_224"
     image_model = 224
-    models_folder = Path(f"./trained_model/model_{model_name}")
+    models_folder = Path(f"./model_{model_name}")
     output_folder = Path(f"./out_model/{model_name}")
     output_folder.mkdir(parents=True, exist_ok=True)
     

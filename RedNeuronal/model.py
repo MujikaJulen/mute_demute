@@ -20,7 +20,7 @@ import torch.nn.functional as F
 
 class EncoderWithClassifier(nn.Module):
 
-    def __init__(self, hidden_size, num_labels, freeze_encoder=True):
+    def __init__(self, hidden_size, num_labels, freeze_encoder=False):
         super().__init__()
         config = ViTMAEConfig(
             image_size=224,
@@ -38,12 +38,16 @@ class EncoderWithClassifier(nn.Module):
         if freeze_encoder:
             for param in self.encoder.parameters():
                 param.requires_grad = False
-        self.classifier = nn.Linear(hidden_size, num_labels)
+        
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_size, hidden_size//3), 
+            nn.ReLU(),                                  
+            nn.Linear(hidden_size//3, num_labels)   
+        )
 
     def forward(self, input_ids):
-
-        outputs = self.encoder(input_ids=input_ids)
+        outputs = self.encoder(pixel_values=input_ids)
         hidden = outputs.last_hidden_state           
-        pooled = hidden.mean(dim=1)                  
+        pooled = hidden.mean(dim=1)             
         logits = self.classifier(pooled)             
         return logits
