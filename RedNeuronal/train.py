@@ -38,14 +38,14 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(degrees=15),
         transforms.ColorJitter(brightness=0.2, contrast=0.2),
-        transforms.ToTensor(),    
-        transforms.Resize((224, 224)),   
+        transforms.Resize((224, 224)), 
+        transforms.ToTensor(),      
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
     val_transforms = transforms.Compose([
-        transforms.ToTensor(),      
-        transforms.Resize((224, 224)),   
+        transforms.Resize((224, 224)), 
+        transforms.ToTensor(),         
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
@@ -62,10 +62,19 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
     model = EncoderWithClassifier(hidden_size=384, num_labels=19, freeze_encoder= False)
     model = model.to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.AdamW(model.parameters(), lr=1e-4)
+    # Ejemplo de configuración del optimizador
+    encoder_params = list(model.encoder.parameters())
+    classifier_params = list(model.classifier.parameters())
+
+    #Para entrenar rápidamente la cabeza, manteniendo "mas o menos" los parámetros del encoder -> FINE TUNNING
+    optimizer = torch.optim.AdamW([
+        {'params': encoder_params, 'lr': 1e-5},  
+        {'params': classifier_params, 'lr': 1e-3} 
+    ], weight_decay=1e-4)
 
     # Training loop with validation and saving best weights
-    num_epochs = 30
+    num_epochs = 100
+    patience = 10
     best_val_loss = float("inf")
     output_folder = Path(output_folder)
     best_model_path = (
@@ -108,18 +117,25 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(model.state_dict(), best_model_path)
+            patience_counter = 0 
+        else:
+            patience_counter += 1 
 
         if (epoch + 1) % 5 == 0:
-            print(
-                f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}"
-            )
+            print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}")
+
+        # Comprobación del Early Stopping
+        if patience_counter >= patience:
+            print(f"\n¡Early stopping activado en la época {epoch + 1}! La validación no ha mejorado en {patience} épocas.")
+            break # Rompe el bucle fo
 
     print(f"Best validation loss: {best_val_loss:.4f}, Model saved to {best_model_path}")
 
     # Plotting the training and validation loss
     plt.figure(figsize=(10, 5))
-    plt.plot(range(num_epochs), train_losses, label="Train Loss")
-    plt.plot(range(num_epochs), val_losses, label="Validation Loss")
+    plt.plot(range(len(train_losses)), train_losses, label="Train Loss")
+    plt.plot(range(len(val_losses)), val_losses, label="Validation Loss")
+
     plt.xlabel("Epochs")
     plt.ylabel("Loss")
     plt.legend()
@@ -127,7 +143,7 @@ def train_model(output_folder: Path, device: torch.device, trained_model):
 
     # Save the plot to the outs/ folder
     plt.savefig(output_folder / "loss_plot.png")
-    plt.savefig(output_folder / "loss_plot.png")
+    plt.show()
     plt.close()
 
 
