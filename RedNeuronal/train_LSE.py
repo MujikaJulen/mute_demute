@@ -11,7 +11,7 @@ from .dataset_LSE import LSEDataset
 from .model_LSE import LSEClassifier
 
 # Número de épocas para el entrenamiento
-num_epochs = 5
+num_epochs = 60
 
 
 def get_device(force: str = "auto") -> torch.device:

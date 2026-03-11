@@ -11,6 +11,37 @@ from .dataset_LSE import LSEDataset
 from .model_LSE import LSEClassifier
 from .train_LSE import num_epochs
 
+def save_metrics_table_image(df, output_path, epochs):
+    """
+    Renderiza el DataFrame de métricas como una tabla en una imagen .png
+    """
+    # Redondeamos valores para una mejor visualización
+    df_plot = df.round(3)
+    
+    fig, ax = plt.subplots(figsize=(12, len(df_plot) * 0.4 + 1)) 
+    ax.axis('tight')
+    ax.axis('off')
+    
+    # Crear la tabla
+    table = ax.table(
+        cellText=df_plot.values,
+        colLabels=df_plot.columns,
+        rowLabels=df_plot.index,
+        cellLoc='center',
+        loc='center',
+        colColours=["#f2f2f2"] * len(df_plot.columns)
+    )
+    
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1.2, 1.2)
+    
+    plt.title(f"Reporte de Métricas LSE - {epochs} Épocas", pad=20, fontsize=14, fontweight='bold')
+    
+    # Guardar imagen
+    plt.savefig(output_path, bbox_inches='tight', dpi=300)
+    plt.close()
+
 def evaluate():
     # 1. Configuración de rutas y carpetas
     # Definimos la carpeta de salida "outs"
@@ -61,7 +92,13 @@ def evaluate():
     # Guardar reporte en CSV
     report_csv_path = output_folder / f"metrics_report_lse_{num_epochs}_epochs.csv"
     df_report.to_csv(report_csv_path)
-    print(f"Reporte de métricas guardado en: {report_csv_path}")
+
+    # GENERAR Y GUARDAR REPORTE EN IMAGEN .PNG (en la ruta absoluta)
+    report_img_path = output_folder / f"metrics_table_lse_{num_epochs}_epochs.png"
+    save_metrics_table_image(df_report, report_img_path, num_epochs)
+
+    print(f"Reporte CSV guardado en: {report_csv_path}")
+    print(f"Tabla de métricas PNG guardada en: {report_img_path}")
     print("\n--- Resumen de Clasificación ---")
     print(classification_report(all_labels, all_preds, target_names=class_names))
 
