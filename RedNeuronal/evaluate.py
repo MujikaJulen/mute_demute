@@ -124,7 +124,7 @@ if __name__ == "__main__":
         model_name = modelos[n_model]
         image_model = img_size[n_model]
         models_folder = Path(f"./trained_model/model_{model_name}")
-        output_folder = Path(f"./out_model/{model_name}")
+        output_folder = Path(f"./out_test_filtered/{model_name}")
         output_folder.mkdir(parents=True, exist_ok=True)
         
         print(f"\nEvaluating model: {model_name}")
@@ -136,7 +136,7 @@ if __name__ == "__main__":
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
 
-        dataset_test_dir = SignDataset("./dataset_filtered/dataset","test", image_size=img_size, transforms=test_transform)
+        dataset_test_dir = SignDataset("./test2_filtered","test2", image_size=img_size, transforms=test_transform)
 
         pin_memory = True if device.type == "cuda" else False
         dataset_test = DataLoader(dataset_test_dir, batch_size=32, shuffle=False, pin_memory=pin_memory,

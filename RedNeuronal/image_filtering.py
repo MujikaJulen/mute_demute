@@ -105,8 +105,8 @@ def filter_images_by_size(dataset_folder, output_folder, scale_size=100):
                 # plt.show()
 
 if __name__ == "__main__":
-    dataset_folder = Path("dataset")
-    output_folder = Path("dataset_filtered")
+    dataset_folder = Path("test2")
+    output_folder = Path("test2_filtered")
     os.makedirs(output_folder, exist_ok=True)
     filter_images_by_size(dataset_folder, output_folder, scale_size=400)
 

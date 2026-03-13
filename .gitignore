@@ -171,3 +171,6 @@ cython_debug/
 dataset
 filtered_dataset
 dataset_filtered
+test2
+test2_filtered
+test2.zip
